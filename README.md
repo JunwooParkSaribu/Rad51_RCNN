@@ -1,11 +1,12 @@
 # Rad51_RCNN
 <h3>Nulcei, rad51 detector based on the mask-rcnn</h3> 
 
-Input &nbsp;&nbsp; : <b>.trxyt</b> [columns(1: h2b id, 2: x position, 3: y position, 4: time)<br>
-Output : Classified mobility(3 types) of h2b in nucleus.
+Input &nbsp;&nbsp; : <b> Cell image stack </b><br>
+Output : Detected nuclei and rad51s along z-axis.
 <br>
 <br>
-
+<note> Since the trained model and training data are too heavy to share on the github,<br>
+contact junwoo.park@sorbonne-universite.fr if you need the trained model.<br>
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/1_nuclei.png)
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/1_rad51.png)
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/2_nuclei.png)
