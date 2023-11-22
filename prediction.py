@@ -1,6 +1,6 @@
 import sys, os
 
-ABSOLUTE_PATH = '/home/junwoo/nuclei_test'
+ABSOLUTE_PATH = '/home/junwoo/Rad51_RCNN'
 FONT_PATH = '/usr/share/fonts/truetype/ubuntu'
 SAVE_PATH = '/mnt/c/Users/jwoo/Desktop/HttpServer/save'
 DATA_PATH = '/mnt/c/Users/jwoo/Desktop/HttpServer/data'
