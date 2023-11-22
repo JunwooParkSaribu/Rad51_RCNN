@@ -5,9 +5,9 @@ Input &nbsp;&nbsp; : <b> Stack of cell images </b><br>
 Output : Detected nuclei and rad51s images along z-axis and its numbers in txt file.
 <br>
 <br>
-<note> Since the trained model and training data are too heavy to share on the github,<br>
-contact junwoo.park@sorbonne-universite.fr if you need the trained model.<br><br>
-program is available in remote through intranet of IBPS, Sorbonne University.  
+<note> Since the trained model and training data are too heavy to upload on the github,<br>
+please contact junwoo.park@sorbonne-universite.fr if you need the trained model or the data.<br><br>
+Currently, the program is only available in remote via intranet of LCQB, Sorbonne University.  
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/1_nuclei.png)
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/1_rad51.png)
 ![](https://github.com/JunwooParkSaribu/Rad51_RCNN/blob/main/img/2_nuclei.png)
