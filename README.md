@@ -2,7 +2,7 @@
 <h3>Nulcei, rad51 detector based on the mask-rcnn</h3> 
 
 Input &nbsp;&nbsp; : <b> Stack of cell images </b><br>
-Output : Detected nuclei and rad51s images along z-axis and its numbers in txt file.
+Output : Detected & segmented nuclei and rad51s from cells along z-axis and its numbers in txt file.
 <br>
 <br>
 <note> Since the trained model and training data are too heavy to upload on the github,<br>
