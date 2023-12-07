@@ -100,7 +100,7 @@ def read_czi(filepath):
         greens = np.array(img[1]).astype(np.double)
 
         if reds.shape[1] * reds.shape[2] > 1048576:
-            dim = (1024, 1024)
+            dim = (2048, 2048)
             tmp = []
             for i, red in enumerate(reds):
                 tmp.append(cv2.resize(red, dsize=dim, interpolation=cv2.INTER_AREA))
@@ -329,7 +329,7 @@ if __name__ == '__main__':
         job_id = sys.argv[1]
     else:
         sys.exit(1)
-    #job_id = 'P2bis'
+    #job_id = 'P3'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -361,6 +361,7 @@ if __name__ == '__main__':
     plt.figure()
     plt.hist(histo, bins=np.arange(0, 256, 1))
     plt.show()
+    exit(1)
     """
     ####
 
