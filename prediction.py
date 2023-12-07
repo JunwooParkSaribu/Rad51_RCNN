@@ -29,6 +29,22 @@ def read_nd2(filepath):
         reds = np.array([np.array(ndfile)[x][1] for x in range(ndfile.shape[0])]).astype(np.double)
         transs = np.array([np.array(ndfile)[x][2] for x in range(ndfile.shape[0])]).astype(np.double)
 
+        if reds.shape[1] * reds.shape[2] > 1048576:
+            dim = (1024, 1024)
+            tmp = []
+            for i, red in enumerate(reds):
+                tmp.append(cv2.resize(red, dsize=dim, interpolation=cv2.INTER_AREA))
+            reds = np.array(tmp)
+            tmp = []
+            for i, green in enumerate(greens):
+                tmp.append(cv2.resize(green, dsize=dim, interpolation=cv2.INTER_AREA))
+            greens = np.array(tmp)
+            tmp = []
+            for i, trans in enumerate(transs):
+                tmp.append(cv2.resize(trans, dsize=dim, interpolation=cv2.INTER_AREA))
+            transs = np.array(tmp)
+
+        z_depth = reds.shape[0]
         y_size = reds.shape[1]
         x_size = reds.shape[2]
         zero_base = np.zeros((y_size, x_size), dtype=np.uint8)
@@ -74,20 +90,32 @@ def read_czi(filepath):
         dyeName = metadata.split('<DyeName>')[1].split('</DyeName>')[0]
         dyeId = metadata.split('<DyeId>')[1].split('</DyeId>')[0]
         img = czi.asarray()
-        nb_channel = img.shape[1]
-        z_depth = img.shape[2]
-        y_size = img.shape[3]
-        x_size = img.shape[4]
-        zero_base = np.zeros((y_size, x_size), dtype=np.uint8)
-        one_base = np.ones((y_size, x_size), dtype=np.uint8)
         if img.shape[0] == 1 and img.shape[5] == 1:
-            img = img.reshape((nb_channel, z_depth, y_size, x_size))
+            img = img.reshape((img.shape[1], img.shape[2], img.shape[3], img.shape[4]))
         else:
             print('czi file array format recheck')
             exit(1)
+
         reds = np.array(img[0]).astype(np.double)
         greens = np.array(img[1]).astype(np.double)
 
+        if reds.shape[1] * reds.shape[2] > 1048576:
+            dim = (1024, 1024)
+            tmp = []
+            for i, red in enumerate(reds):
+                tmp.append(cv2.resize(red, dsize=dim, interpolation=cv2.INTER_AREA))
+            reds = np.array(tmp)
+
+            tmp = []
+            for i, green in enumerate(greens):
+                tmp.append(cv2.resize(green, dsize=dim, interpolation=cv2.INTER_AREA))
+            greens = np.array(tmp)
+
+        z_depth = reds.shape[0]
+        y_size = reds.shape[1]
+        x_size = reds.shape[2]
+        zero_base = np.zeros((y_size, x_size), dtype=np.uint8)
+        one_base = np.ones((y_size, x_size), dtype=np.uint8)
         r_max = np.mean(np.max(reds, axis=(1, 2)))
         g_max = np.mean(np.max(greens, axis=(1, 2)))
 
@@ -301,6 +329,7 @@ if __name__ == '__main__':
         job_id = sys.argv[1]
     else:
         sys.exit(1)
+    #job_id = 'P2bis'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -317,7 +346,6 @@ if __name__ == '__main__':
         score_threshold = params['score'] / 100.
     else:
         score_threshold = .90
-
     selected_file = file
     if '.nd2' in selected_file:
         reds, greens, transs = read_nd2(selected_file)
@@ -325,8 +353,18 @@ if __name__ == '__main__':
         reds, greens, info = read_czi(selected_file)
     else:
         exit(1)
-    nb_proj, height, width, n_channel = reds.shape
+    ####
+    """
+    histo = []
+    for pixel in reds[0].flatten():
+        histo.append(pixel)
+    plt.figure()
+    plt.hist(histo, bins=np.arange(0, 256, 1))
+    plt.show()
+    """
+    ####
 
+    nb_proj, height, width, n_channel = reds.shape
     nuclei_cfg = get_cfg()
     nuclei_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
     nuclei_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128
@@ -340,7 +378,7 @@ if __name__ == '__main__':
     protein_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
     protein_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128
     protein_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
-    protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model2.pth"
+    protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
     protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.1
     protein_cfg.TEST.DETECTIONS_PER_IMAGE = 200
     protein_predictor = DefaultPredictor(protein_cfg)
