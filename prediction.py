@@ -20,6 +20,7 @@ from detectron2.utils.visualizer import ColorMode
 from czifile import CziFile
 import imageio
 import scipy
+import tifffile
 
 
 def read_nd2(filepath):
@@ -29,8 +30,8 @@ def read_nd2(filepath):
         reds = np.array([np.array(ndfile)[x][1] for x in range(ndfile.shape[0])]).astype(np.double)
         transs = np.array([np.array(ndfile)[x][2] for x in range(ndfile.shape[0])]).astype(np.double)
 
-        if reds.shape[1] * reds.shape[2] > 1048576:
-            dim = (1024, 1024)
+        if reds.shape[1] * reds.shape[2] > 2048 * 2048:
+            dim = (2048, 2048)
             tmp = []
             for i, red in enumerate(reds):
                 tmp.append(cv2.resize(red, dsize=dim, interpolation=cv2.INTER_AREA))
@@ -54,9 +55,6 @@ def read_nd2(filepath):
         t_max = np.mean(np.max(transs, axis=(1, 2)))
 
         for i, (r, g, t) in enumerate(zip(reds, greens, transs)):
-            r_min = np.min(r)
-            g_min = np.min(g)
-            t_min = np.min(t)
             r_mode = scipy.stats.mode(r.reshape(r.shape[0] * r.shape[1]), keepdims=False)[0]
             g_mode = scipy.stats.mode(g.reshape(g.shape[0] * g.shape[1]), keepdims=False)[0]
             t_mode = scipy.stats.mode(t.reshape(t.shape[0] * t.shape[1]), keepdims=False)[0]
@@ -66,6 +64,9 @@ def read_nd2(filepath):
             r = np.maximum(r, zero_base)
             g = np.maximum(g, zero_base)
             t = np.maximum(t, zero_base)
+            r_min = np.min(r)
+            g_min = np.min(g)
+            t_min = np.min(t)
             r = r / (r_max - r_min)
             g = g / (g_max - g_min)
             t = t / (t_max - t_min)
@@ -99,7 +100,7 @@ def read_czi(filepath):
         reds = np.array(img[0]).astype(np.double)
         greens = np.array(img[1]).astype(np.double)
 
-        if reds.shape[1] * reds.shape[2] > 1048576:
+        if reds.shape[1] * reds.shape[2] > 2048 * 2048:
             dim = (2048, 2048)
             tmp = []
             for i, red in enumerate(reds):
@@ -120,14 +121,14 @@ def read_czi(filepath):
         g_max = np.mean(np.max(greens, axis=(1, 2)))
 
         for i, (r, g) in enumerate(zip(reds, greens)):
-            r_min = np.min(r)
-            g_min = np.min(g)
             r_mode = scipy.stats.mode(r.reshape(r.shape[0] * r.shape[1]), keepdims=False)[0]
             g_mode = scipy.stats.mode(g.reshape(g.shape[0] * g.shape[1]), keepdims=False)[0]
             r = r - r_mode
             g = g - g_mode
             r = np.maximum(r, zero_base)
             g = np.maximum(g, zero_base)
+            r_min = np.min(r)
+            g_min = np.min(g)
             r = r / (r_max - r_min)
             g = g / (g_max - g_min)
             r = np.minimum(r, one_base)
@@ -140,6 +141,59 @@ def read_czi(filepath):
 
     return reds, greens, {'zDepth': z_depth, 'xSize': x_size, 'ySize': y_size,
                           'pixelType': pixelType, 'dyeName': dyeName, 'dyeId': dyeId, 'pixelMicrons': 'Unknown'}
+
+
+def read_tif(filepath):
+    reds = []
+    greens = []
+    imgs = tifffile.imread(filepath).astype(np.double)
+    z_depth = imgs.shape[0]
+    for z_level in range(z_depth):
+        reds.append(imgs[z_level][0])
+        greens.append(imgs[z_level][1])
+    reds = np.array(reds)
+    greens = np.array(greens)
+
+    if reds.shape[1] * reds.shape[2] > 2048 * 2048:
+        dim = (2048, 2048)
+        tmp = []
+        for i, red in enumerate(reds):
+            tmp.append(cv2.resize(red, dsize=dim, interpolation=cv2.INTER_AREA))
+        reds = np.array(tmp)
+
+        tmp = []
+        for i, green in enumerate(greens):
+            tmp.append(cv2.resize(green, dsize=dim, interpolation=cv2.INTER_AREA))
+        greens = np.array(tmp)
+
+    y_size = reds.shape[1]
+    x_size = reds.shape[2]
+    zero_base = np.zeros((y_size, x_size), dtype=np.uint8)
+    one_base = np.ones((y_size, x_size), dtype=np.uint8)
+    r_max = np.mean(np.max(reds, axis=(1, 2)))
+    g_max = np.mean(np.max(greens, axis=(1, 2)))
+
+    for i, (r, g) in enumerate(zip(reds, greens)):
+        r_mode = scipy.stats.mode(r.reshape(r.shape[0] * r.shape[1]), keepdims=False)[0]
+        g_mode = scipy.stats.mode(g.reshape(g.shape[0] * g.shape[1]), keepdims=False)[0]
+        r = r - r_mode
+        g = g - g_mode
+        r = np.maximum(r, zero_base)
+        g = np.maximum(g, zero_base)
+        r_min = np.min(r)
+        g_min = np.min(g)
+        r = r / (r_max - r_min)
+        g = g / (g_max - g_min)
+        r = np.minimum(r, one_base)
+        g = np.minimum(g, one_base)
+        reds[i] = r
+        greens[i] = g
+    reds = np.array(np.stack([reds, np.zeros(reds.shape), np.zeros(reds.shape)], axis=3) * 255).astype(np.uint8)
+    greens = np.array(np.stack([np.zeros(greens.shape), greens, np.zeros(greens.shape)], axis=3) * 255).astype(
+        np.uint8)
+
+    return reds, greens, {'zDepth': z_depth, 'xSize': x_size, 'ySize': y_size,
+                          'pixelType': 'Unknown', 'dyeName': 'Unknown', 'dyeId': 'Unknown', 'pixelMicrons': 'Unknown'}
 
 
 def old_overlay_instances(img, masks, color=(255, 0, 0), opacity=0.05, score=None):
@@ -229,7 +283,7 @@ def IoU(boxA, boxB):
 def read_file(directory):
     files = os.listdir(directory)
     for file in files:
-        if '.nd2' in file or '.czi' in file:
+        if '.nd2' in file or '.czi' in file or '.tif' in file:
             return f'{directory}/{file}'
     return None
 
@@ -329,7 +383,7 @@ if __name__ == '__main__':
         job_id = sys.argv[1]
     else:
         sys.exit(1)
-    #job_id = 'P3'
+    #job_id = 'exex1'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -347,10 +401,13 @@ if __name__ == '__main__':
     else:
         score_threshold = .90
     selected_file = file
+
     if '.nd2' in selected_file:
         reds, greens, transs = read_nd2(selected_file)
     elif '.czi' in selected_file:
         reds, greens, info = read_czi(selected_file)
+    elif '.tif' in selected_file:
+        reds, greens, info = read_tif(selected_file)
     else:
         exit(1)
     ####
@@ -363,6 +420,10 @@ if __name__ == '__main__':
     plt.show()
     exit(1)
     """
+    #for green in greens:
+    #    plt.figure(figsize=(9,9))
+    #    plt.imshow(green)
+    #    plt.show()
     ####
 
     nb_proj, height, width, n_channel = reds.shape
