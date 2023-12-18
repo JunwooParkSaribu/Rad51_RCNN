@@ -37,31 +37,19 @@ def read_nd2(filepath, target_dim=(2048, 2048), erase=False):
             transs, _ = erase_dead_cells(transs, d_masks=dead_cell_masks)
 
         if reds.shape[1] * reds.shape[2] > target_dim[0] * target_dim[1]:
-            img_arr = image_down_sampling(reds, greens, dim=target_dim)
+            img_arr = image_down_sampling(reds, greens, transs, dim=target_dim)
             reds = img_arr[0]
             greens = img_arr[1]
             transs = img_arr[2]
 
+        reds = normalization(reds)
+        greens = normalization(greens)
+        transs = normalization(transs)
+        reds = add_max_layer(reds)
+
         z_depth = reds.shape[0]
         y_size = reds.shape[1]
         x_size = reds.shape[2]
-        r_max = np.max(np.max(reds, axis=(1, 2)))
-        g_max = np.max(np.max(greens, axis=(1, 2)))
-        t_max = np.max(np.max(transs, axis=(1, 2)))
-        r_min = np.min(np.min(reds, axis=(1, 2)))
-        g_min = np.min(np.min(greens, axis=(1, 2)))
-        t_min = np.min(np.min(transs, axis=(1, 2)))
-
-        for i, (r, g, t) in enumerate(zip(reds, greens, transs)):
-            r -= r_min
-            g -= g_min
-            t -= t_min
-            r = r / (r_max - r_min)
-            g = g / (g_max - g_min)
-            t = t / (t_max - t_min)
-            reds[i] = r
-            greens[i] = g
-            transs[i] = t
 
         red = np.array(np.stack([reds, np.zeros(reds.shape), np.zeros(reds.shape)], axis=3) * 255).astype(np.uint8)
         green = np.array(np.stack([np.zeros(greens.shape), greens, np.zeros(greens.shape)], axis=3) * 255).astype(np.uint8)
@@ -94,21 +82,13 @@ def read_czi(filepath, target_dim=(2048, 2048), erase=False):
             reds = img_arr[0]
             greens = img_arr[1]
 
+        reds = normalization(reds)
+        greens = normalization(greens)
+        reds = add_max_layer(reds)
+
         z_depth = reds.shape[0]
         y_size = reds.shape[1]
         x_size = reds.shape[2]
-        r_max = np.max(np.max(reds, axis=(1, 2)))
-        g_max = np.max(np.max(greens, axis=(1, 2)))
-        r_min = np.min(np.min(reds, axis=(1, 2)))
-        g_min = np.min(np.min(greens, axis=(1, 2)))
-
-        for i, (r, g) in enumerate(zip(reds, greens)):
-            r -= r_min
-            g -= g_min
-            r = r / (r_max - r_min)
-            g = g / (g_max - g_min)
-            reds[i] = r
-            greens[i] = g
 
         reds = np.array(np.stack([reds, np.zeros(reds.shape), np.zeros(reds.shape)], axis=3) * 255).astype(np.uint8)
         greens = np.array(np.stack([np.zeros(greens.shape), greens, np.zeros(greens.shape)], axis=3) * 255).astype(
@@ -136,21 +116,13 @@ def read_tif(filepath, target_dim=(2048, 2048), erase=False):
         reds = img_arr[0]
         greens = img_arr[1]
 
+    reds = normalization(reds)
+    greens = normalization(greens)
+    reds = add_max_layer(reds)
+
+    z_depth = reds.shape[0]
     y_size = reds.shape[1]
     x_size = reds.shape[2]
-    r_max = np.max(np.max(reds, axis=(1, 2)))
-    g_max = np.max(np.max(greens, axis=(1, 2)))
-    r_min = np.min(np.min(reds, axis=(1, 2)))
-    g_min = np.min(np.min(greens, axis=(1, 2)))
-
-    for i, (r, g) in enumerate(zip(reds, greens)):
-        r -= r_min
-        g -= g_min
-        r = r / (r_max - r_min)
-        g = g / (g_max - g_min)
-        reds[i] = r
-        greens[i] = g
-
     reds = np.array(np.stack([reds, np.zeros(reds.shape), np.zeros(reds.shape)], axis=3) * 255).astype(np.uint8)
     greens = np.array(np.stack([np.zeros(greens.shape), greens, np.zeros(greens.shape)], axis=3) * 255).astype(
         np.uint8)
@@ -168,11 +140,51 @@ def image_down_sampling(*args, dim=(2048, 2048)):
     return np.array(ret_arr)
 
 
+def normalization(imgs):
+    val_max = np.max(np.max(imgs, axis=(1, 2)))
+    val_min = np.min(np.min(imgs, axis=(1, 2)))
+    for i, img in enumerate(imgs):
+        img -= val_min
+        img = img / (val_max - val_min)
+        imgs[i] = img
+    return imgs
+
+
+def add_max_layer(imgs):
+    max_layer = np.amax(imgs, axis=0)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (30, 30))
+    topHat = cv2.morphologyEx(max_layer, cv2.MORPH_TOPHAT, kernel)
+    blackHat = cv2.morphologyEx(max_layer, cv2.MORPH_BLACKHAT, kernel)
+    res = max_layer + np.maximum(10. * (topHat - blackHat), np.zeros(max_layer.shape))
+
+    res = np.minimum(res, np.ones(res.shape))
+    res = np.maximum(res, np.zeros(res.shape))
+    res = res - np.min(res) / (np.max(res) - np.min(res))
+    # Stacking the original image with the enhanced image
+    """
+    result = np.hstack((max_layer, res, res - max_layer))
+    plt.figure()
+    plt.imshow(result)
+    plt.show()
+    """
+    new_imgs = np.concatenate((imgs, [res]))
+    return new_imgs
+
+
 def erase_dead_cells(imgs, d_masks):
     """
     img: stacked grey scale image without channel
     """
     if d_masks is None:
+        max_layer = np.amax(imgs, axis=0)
+        d_masks = np.zeros(max_layer.shape)
+        clustering = KMeans(n_clusters=2, init='k-means++', n_init='auto').fit(max_layer.reshape(-1, 1))
+        if np.sum(clustering.labels_) < (max_layer.shape[0] * max_layer.shape[1]) / 2.:
+            d_masks = ((clustering.labels_ + 1) % 2).reshape(max_layer.shape)
+        else:
+            d_masks = clustering.labels_.reshape(max_layer.shape)
+        d_masks = np.array([d_masks for _ in range(imgs.shape[0])])
+        """
         d_masks = np.zeros(imgs.shape, dtype=np.uint8)
         for i, img in enumerate(imgs):
             #clustering = SpectralClustering(n_clusters=2, assign_labels='discretize', eigen_solver="arpack").fit(img.reshape(-1, 1))
@@ -183,14 +195,15 @@ def erase_dead_cells(imgs, d_masks):
                 d_masks[i] = ((clustering.labels_ + 1) % 2).reshape(img.shape)
             else:
                 d_masks[i] = clustering.labels_.reshape(img.shape)
-    masked_imgs = (imgs * d_masks).astype(np.double)
+    """
+    masked_imgs = imgs * d_masks
     min_val = np.min(np.min(imgs, axis=(1, 2)))
     for i, masked_img in enumerate(masked_imgs):
         for row in range(len(masked_img)):
             for col in range(len(masked_img[row])):
                 if masked_img[row][col] == 0:
                     masked_img[row][col] = min_val
-    return masked_imgs, d_masks
+    return masked_imgs, d_masks.astype(np.double)
 
 
 def old_overlay_instances(img, masks, color=(255, 0, 0), opacity=0.05, score=None):
@@ -411,22 +424,24 @@ if __name__ == '__main__':
         exit(1)
 
     print(f'### Prediction starts ###')
-    nb_proj, height, width, n_channel = reds.shape
     nuclei_cfg = get_cfg()
     nuclei_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
-    nuclei_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128
+    nuclei_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     nuclei_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
+    nuclei_cfg.MODEL.ROI_BOX_HEAD.FED_LOSS_NUM_CLASSES = 1
     nuclei_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/nuclei_model.pth"
-    nuclei_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.1
-    nuclei_cfg.TEST.DETECTIONS_PER_IMAGE = 400
+    nuclei_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.005
+    nuclei_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.3
+    nuclei_cfg.MODEL.ROI_HEADS.IOU_THRESHOLDS = [0.1]
+    nuclei_cfg.TEST.DETECTIONS_PER_IMAGE = 1000
     nuclei_predictor = DefaultPredictor(nuclei_cfg)
 
     protein_cfg = get_cfg()
     protein_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
-    protein_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 128
+    protein_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     protein_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
     protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
-    protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.1
+    protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.001
     protein_cfg.TEST.DETECTIONS_PER_IMAGE = 200
     protein_predictor = DefaultPredictor(protein_cfg)
 
@@ -435,15 +450,19 @@ if __name__ == '__main__':
         all_scores = []
         all_masks = []
         all_cls = []
-        for i in range(nb_proj):
+        for i in range(images.shape[0]):
             boxs, cls, masks, scores = prediction(predic, images[i], score_threshold)
+
             """
+            img = Image.fromarray(np.uint8(images[i]), mode='RGB')
+            img.save(f'{save_folder}/{target}_{i}.png')
             img = overlay_instances(
                 img=images[i],
                 masks=masks, bboxs=boxs,
                 color=(0, 255, 255), opacity=0.3, score=scores)
             img.save(f'{save_folder}/{target}_{i}.png')
             """
+
             all_boxs.extend(boxs)
             all_scores.extend(scores)
             all_masks.extend(masks)
@@ -463,10 +482,10 @@ if __name__ == '__main__':
         filtered_scores = np.array(filtered_scores)
         filtered_masks = np.array(filtered_masks)
         filtered_cls = np.array(filtered_cls)
-        all_boxs.clear()
-        all_scores.clear()
-        all_masks.clear()
-        all_cls.clear()
+        del all_boxs
+        del all_scores
+        del all_masks
+        del all_cls
         if target == 'nuclei':
             color = (0, 255, 255)
             nuclei_boxs = filtered_boxs.copy()
@@ -474,7 +493,7 @@ if __name__ == '__main__':
             color = (255, 0, 255)
             protein_boxs = filtered_boxs.copy()
 
-        img = overlay_instances(img=np.int8(np.sum(images, axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
+        img = overlay_instances(img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
                                 masks=filtered_masks, bboxs=filtered_boxs,
                                 color=color, opacity=0.3, score=filtered_scores)
         img.save(f'{save_folder}/{target}.png')
