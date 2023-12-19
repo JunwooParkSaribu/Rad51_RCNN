@@ -389,14 +389,15 @@ def prediction(predictor, image, score_threshold):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        job_id = sys.argv[1]
-    else:
-        sys.exit(1)
+    #if len(sys.argv) > 1:
+    #    job_id = sys.argv[1]
+    #else:
+    #    sys.exit(1)
+    job_id = 'Control9'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
-    target_dim = (2048, 2048)
+    target_dim = (1024, 1024)
 
     file = read_file(data_foler)
     params = read_params(data_foler)
@@ -426,19 +427,17 @@ if __name__ == '__main__':
     print(f'### Prediction starts ###')
     nuclei_cfg = get_cfg()
     nuclei_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
-    nuclei_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     nuclei_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
     nuclei_cfg.MODEL.ROI_BOX_HEAD.FED_LOSS_NUM_CLASSES = 1
     nuclei_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/nuclei_model.pth"
     nuclei_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.005
-    nuclei_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.3
+    nuclei_cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.8
     nuclei_cfg.MODEL.ROI_HEADS.IOU_THRESHOLDS = [0.1]
     nuclei_cfg.TEST.DETECTIONS_PER_IMAGE = 1000
     nuclei_predictor = DefaultPredictor(nuclei_cfg)
 
     protein_cfg = get_cfg()
     protein_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
-    protein_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
     protein_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
     protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
     protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.001
@@ -456,11 +455,12 @@ if __name__ == '__main__':
             """
             img = Image.fromarray(np.uint8(images[i]), mode='RGB')
             img.save(f'{save_folder}/{target}_{i}.png')
-            img = overlay_instances(
-                img=images[i],
-                masks=masks, bboxs=boxs,
-                color=(0, 255, 255), opacity=0.3, score=scores)
-            img.save(f'{save_folder}/{target}_{i}.png')
+            if i >= (images.shape[0] - 1):
+                img = overlay_instances(
+                    img=images[i],
+                    masks=masks, bboxs=boxs,
+                    color=(0, 255, 255), opacity=0.3, score=scores)
+                img.save(f'{save_folder}/{target}_{i}.png')
             """
 
             all_boxs.extend(boxs)
