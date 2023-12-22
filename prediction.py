@@ -315,7 +315,7 @@ def read_params(path: str) -> dict:
             line = line.strip().split('=')
             param_name = line[0].strip()
             param_val = line[1].split('#')[0].strip()
-            if param_name in ['score']:
+            if 'score' in param_name:
                 params[param_name] = int(param_val)
             else:
                 params[param_name] = param_val
@@ -393,7 +393,7 @@ if __name__ == '__main__':
     #    job_id = sys.argv[1]
     #else:
     #    sys.exit(1)
-    job_id = 'Control9'
+    job_id = 'mymy'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -404,11 +404,12 @@ if __name__ == '__main__':
     overlay_indice = []
     protein_boxs = []
     nuclei_boxs = []
-
-    if file is None or 'erase' not in params or 'score' not in params:
+    if (file is None or 'erase' not in params
+            or 'nuclei_score' not in params or 'rad51_score' not in params):
         exit(1)
 
-    score_threshold = params['score'] / 100.
+    nuclei_score = params['nuclei_score'] / 100.
+    rad51_score = params['rad51_score'] / 100.
     if params['erase'] == 'True':
         erase = True
     else:
@@ -444,13 +445,15 @@ if __name__ == '__main__':
     protein_cfg.TEST.DETECTIONS_PER_IMAGE = 200
     protein_predictor = DefaultPredictor(protein_cfg)
 
-    for predic, images, target in zip([nuclei_predictor, protein_predictor], [reds, greens], ['nuclei', 'rad51']):
+    for predic, images, target, score in zip([nuclei_predictor, protein_predictor],
+                                             [reds, greens], ['nuclei', 'rad51'],
+                                             [nuclei_score, rad51_score]):
         all_boxs = []
         all_scores = []
         all_masks = []
         all_cls = []
         for i in range(images.shape[0]):
-            boxs, cls, masks, scores = prediction(predic, images[i], score_threshold)
+            boxs, cls, masks, scores = prediction(predic, images[i], score)
 
             """
             img = Image.fromarray(np.uint8(images[i]), mode='RGB')
@@ -492,6 +495,13 @@ if __name__ == '__main__':
         else:
             color = (255, 0, 255)
             protein_boxs = filtered_boxs.copy()
+
+        #########
+        mask_sums = np.array([np.sum(masque) for masque in filtered_masks])
+        plt.figure()
+        plt.hist(mask_sums)
+        plt.show()
+        #########
 
         img = overlay_instances(img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
                                 masks=filtered_masks, bboxs=filtered_boxs,
