@@ -499,7 +499,7 @@ if __name__ == '__main__':
         #########
         mask_sums = np.array([np.sum(masque) for masque in filtered_masks])
         plt.figure()
-        plt.hist(mask_sums)
+        plt.hist(mask_sums, bins=np.arange(np.min(mask_sums), np.max(mask_sums), 1))
         plt.show()
         #########
 
