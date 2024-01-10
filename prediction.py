@@ -388,12 +388,26 @@ def prediction(predictor, image, score_threshold):
     return boxs, cls, masks, scores
 
 
+def post_processing(masks, bins=25):
+    mask_sums = np.array([np.sum(masque) for masque in masks])
+    args = np.arange(len(masks))
+    post_mask_args = args.copy()
+    for _ in range(3):
+        mask_sums_mode = (np.argmax(np.histogram(mask_sums[post_mask_args],
+                                                 bins=np.arange(0, np.max(mask_sums[post_mask_args]) + bins, bins))[0])
+                          * bins + (bins / 2))
+        mask_std = np.std(mask_sums[post_mask_args])
+        post_mask_args = np.array([arg for arg, val in zip(args, mask_sums) if (mask_sums_mode - 3. * mask_std) < val < (mask_sums_mode + 3. * mask_std)])
+        print(mask_sums[post_mask_args])
+    return post_mask_args
+
+
 if __name__ == '__main__':
-    #if len(sys.argv) > 1:
-    #    job_id = sys.argv[1]
-    #else:
-    #    sys.exit(1)
-    job_id = 'mymy'
+    if len(sys.argv) > 1:
+        job_id = sys.argv[1]
+    else:
+        sys.exit(1)
+    #job_id = 'mymy'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -489,19 +503,22 @@ if __name__ == '__main__':
         del all_scores
         del all_masks
         del all_cls
+
+        #########
+        if target == 'nuclei':
+            post_mask_args = post_processing(filtered_masks)
+            filtered_masks = filtered_masks[post_mask_args]
+            filtered_boxs = filtered_boxs[post_mask_args]
+            filtered_scores = filtered_scores[post_mask_args]
+            filtered_cls = filtered_cls[post_mask_args]
+        #########
+
         if target == 'nuclei':
             color = (0, 255, 255)
             nuclei_boxs = filtered_boxs.copy()
         else:
             color = (255, 0, 255)
             protein_boxs = filtered_boxs.copy()
-
-        #########
-        mask_sums = np.array([np.sum(masque) for masque in filtered_masks])
-        plt.figure()
-        plt.hist(mask_sums, bins=np.arange(np.min(mask_sums), np.max(mask_sums), 1))
-        plt.show()
-        #########
 
         img = overlay_instances(img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
                                 masks=filtered_masks, bboxs=filtered_boxs,
