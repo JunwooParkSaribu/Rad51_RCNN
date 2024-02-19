@@ -398,20 +398,19 @@ def post_processing(masks, bins=25):
                           * bins + (bins / 2))
         mask_std = np.std(mask_sums[post_mask_args])
         post_mask_args = np.array([arg for arg, val in zip(args, mask_sums) if (mask_sums_mode - 3. * mask_std) < val < (mask_sums_mode + 3. * mask_std)])
-        print(mask_sums[post_mask_args])
     return post_mask_args
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        job_id = sys.argv[1]
-    else:
-        sys.exit(1)
-    #job_id = 'mymy'
+    #if len(sys.argv) > 1:
+    #    job_id = sys.argv[1]
+    #else:
+    #    sys.exit(1)
+    job_id = 'mymy'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
-    target_dim = (1024, 1024)
+    target_dim = (2048, 2048)
 
     file = read_file(data_foler)
     params = read_params(data_foler)
@@ -455,6 +454,7 @@ if __name__ == '__main__':
     protein_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
     protein_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
     protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
+    #protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model2.pth"
     protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.001
     protein_cfg.TEST.DETECTIONS_PER_IMAGE = 200
     protein_predictor = DefaultPredictor(protein_cfg)
