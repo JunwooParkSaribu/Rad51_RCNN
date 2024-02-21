@@ -453,8 +453,8 @@ if __name__ == '__main__':
     protein_cfg = get_cfg()
     protein_cfg.merge_from_file(f'{ABSOLUTE_PATH}/config/rad51_config.yaml')
     protein_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
-    protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
-    #protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model2.pth"
+    protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model2.pth"
+    #protein_cfg.MODEL.WEIGHTS = f"{MODEL_PATH}/rad51protein_model.pth"
     protein_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.001
     protein_cfg.TEST.DETECTIONS_PER_IMAGE = 200
     protein_predictor = DefaultPredictor(protein_cfg)
