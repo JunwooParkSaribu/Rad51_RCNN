@@ -9,20 +9,16 @@ MODEL_PATH = f'{ABSOLUTE_PATH}/model'
 sys.path.insert(0, os.path.abspath(f'{ABSOLUTE_PATH}/detectron2'))
 
 import numpy as np
-import os, json, cv2, random
+import os, cv2
 import matplotlib.pyplot as plt
 import nd2
 from PIL import Image, ImageFont, ImageDraw
 from detectron2 import model_zoo
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
-from detectron2.utils.visualizer import Visualizer
-from detectron2.utils.visualizer import ColorMode
 from czifile import CziFile
-import imageio
-import scipy
 import tifffile
-from sklearn.cluster import SpectralClustering, KMeans, AgglomerativeClustering, OPTICS
+from sklearn.cluster import KMeans
 
 
 def read_nd2(filepath, target_dim=(2048, 2048), erase=False):
@@ -239,7 +235,7 @@ def old_overlay_instances(img, masks, color=(255, 0, 0), opacity=0.05, score=Non
     return img
 
 
-def overlay_instances(img, masks, bboxs, color=(255, 0, 0), opacity=0.05, score=None):
+def overlay_instances(img, masks, bboxs, opacity=0.05, score=None, color=None):
     font_size = 7
     font1 = ImageFont.truetype(font=f'{FONT_PATH}/Ubuntu-MI.ttf', size=font_size)
     font2 = ImageFont.truetype(font=f'{FONT_PATH}/Ubuntu-M.ttf', size=font_size)
@@ -392,13 +388,64 @@ def post_processing(masks, bins=25):
     mask_sums = np.array([np.sum(masque) for masque in masks])
     args = np.arange(len(masks))
     post_mask_args = args.copy()
-    for _ in range(3):
+    for _ in range(2):
         mask_sums_mode = (np.argmax(np.histogram(mask_sums[post_mask_args],
                                                  bins=np.arange(0, np.max(mask_sums[post_mask_args]) + bins, bins))[0])
                           * bins + (bins / 2))
         mask_std = np.std(mask_sums[post_mask_args])
         post_mask_args = np.array([arg for arg, val in zip(args, mask_sums) if (mask_sums_mode - 3. * mask_std) < val < (mask_sums_mode + 3. * mask_std)])
     return post_mask_args
+
+
+def get_eccentricity_from_masks(masks):
+    eccs = []
+    for mask in masks:
+        pts = get_boundary(mask)
+        X = pts[:, 1].reshape(-1, 1)
+        Y = pts[:, 0].reshape(-1, 1)
+        A = np.hstack([X ** 2, X * Y, Y ** 2, X, Y])
+        b = np.ones_like(X)
+        x = np.linalg.lstsq(A, b, rcond=None)[0].squeeze()
+        eta_matrix = np.array([[x[0], x[1]/2, x[3]/2],
+                               [x[1]/2, x[2], x[4]/2],
+                               [x[3]/2, x[4]/2, -1]])
+        if np.linalg.det(eta_matrix) < 0:
+            eta = 1
+        else:
+            eta = -1
+        eccentricity = np.sqrt((2 * np.sqrt((x[0] - x[2])**2 + x[1]**2))/
+                               (eta * (x[0] + x[2]) + (np.sqrt((x[0] - x[2])**2 + x[1]**2))))
+        """
+        plt.figure()
+        plt.scatter(X, Y, label='segmented Rad51 boundary')
+        x_coord = np.linspace(np.min(X.flatten()), np.max(X.flatten()) + 1, 300)
+        y_coord = np.linspace(np.min(Y.flatten()), np.max(Y.flatten()) + 1, 300)
+        X_coord, Y_coord = np.meshgrid(x_coord, y_coord)
+        Z_coord = x[0] * X_coord ** 2 + x[1] * X_coord * Y_coord + x[2] * Y_coord ** 2 + x[3] * X_coord + x[4] * Y_coord
+        plt.contour(X_coord, Y_coord, Z_coord, levels=[1], colors=('r'), linewidths=2)
+        plt.legend()
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.imshow(mask)
+        plt.show()
+        """
+
+        eccs.append(eccentricity)
+    return np.array(eccs)
+
+
+def get_boundary(mask):
+    boundaries = []
+    pts = np.argwhere(mask == 1)
+    for pt in pts:
+        for delta in [[-1, -1], [-1, 0], [-1, 1],
+                      [0, -1], [0, 1],
+                      [1, -1], [1, 0], [1, 1]]:
+            if mask[max(0, min(pt[0] - delta[0], mask.shape[0])), max(0, min(pt[1] - delta[1], mask.shape[1]))] == 0:
+                boundaries.append(pt)
+                break
+    boundaries = np.array(boundaries)
+    return boundaries
 
 
 if __name__ == '__main__':
@@ -421,6 +468,9 @@ if __name__ == '__main__':
             or 'nuclei_score' not in params or 'rad51_score' not in params):
         exit(1)
 
+    eccentricity_threshold = .75
+    nuclei_iou_threshold = .2
+    rad51_iou_threshold = .35
     nuclei_score = params['nuclei_score'] / 100.
     rad51_score = params['rad51_score'] / 100.
     if params['erase'] == 'True':
@@ -485,7 +535,10 @@ if __name__ == '__main__':
             all_masks.extend(masks)
             all_cls.extend(cls)
 
-        indices = nms(all_boxs, all_scores, 0.2)
+        if target=='nuclei':
+            indices = nms(all_boxs, all_scores, nuclei_iou_threshold)
+        else:
+            indices = nms(all_boxs, all_scores, rad51_iou_threshold)
         filtered_boxs = []
         filtered_scores = []
         filtered_masks = []
@@ -504,25 +557,42 @@ if __name__ == '__main__':
         del all_masks
         del all_cls
 
-        #########
         if target == 'nuclei':
             post_mask_args = post_processing(filtered_masks)
             filtered_masks = filtered_masks[post_mask_args]
             filtered_boxs = filtered_boxs[post_mask_args]
             filtered_scores = filtered_scores[post_mask_args]
             filtered_cls = filtered_cls[post_mask_args]
-        #########
+        if target == 'rad51':
+            eccs = get_eccentricity_from_masks(filtered_masks)
+            circle_args = np.argwhere(eccs < eccentricity_threshold).flatten()
+            ellipse_args = np.argwhere(eccs >= eccentricity_threshold).flatten()
 
         if target == 'nuclei':
-            color = (0, 255, 255)
             nuclei_boxs = filtered_boxs.copy()
+            img = overlay_instances(
+                img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
+                masks=filtered_masks, bboxs=filtered_boxs,
+                opacity=0.4, score=filtered_scores, color=(0, 255, 255))
         else:
-            color = (255, 0, 255)
             protein_boxs = filtered_boxs.copy()
+            circle_masks = filtered_masks[circle_args]
+            circle_boxs = filtered_boxs[circle_args]
+            circle_scores = filtered_scores[circle_args]
+            circle_cls = filtered_cls[circle_args]
+            ellipse_masks = filtered_masks[ellipse_args]
+            ellipse_boxs = filtered_boxs[ellipse_args]
+            ellipse_scores = filtered_scores[ellipse_args]
+            ellipse_cls = filtered_cls[ellipse_args]
 
-        img = overlay_instances(img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
-                                masks=filtered_masks, bboxs=filtered_boxs,
-                                color=color, opacity=0.3, score=filtered_scores)
+            img = overlay_instances(
+                img=np.int8(np.max(images, axis=0, keepdims=True).reshape(images.shape[1:])),
+                masks=circle_masks, bboxs=circle_boxs,
+                opacity=0.4, score=circle_scores, color=(255, 0, 255))
+            img = overlay_instances(
+                img=img,
+                masks=ellipse_masks, bboxs=ellipse_boxs,
+                opacity=0.4, score=ellipse_scores, color=(0, 0, 255))
         img.save(f'{save_folder}/{target}.png')
 
     overlay_img = Image.fromarray(
