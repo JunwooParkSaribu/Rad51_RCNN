@@ -235,7 +235,7 @@ def old_overlay_instances(img, masks, color=(255, 0, 0), opacity=0.05, score=Non
     return img
 
 
-def overlay_instances(img, masks, bboxs, opacity=0.05, score=None, color=None):
+def overlay_instances(img, args, masks, bboxs, opacity=0.05, score=None, color=None):
     font_size = 7
     font1 = ImageFont.truetype(font=f'{FONT_PATH}/Ubuntu-MI.ttf', size=font_size)
     font2 = ImageFont.truetype(font=f'{FONT_PATH}/Ubuntu-M.ttf', size=font_size)
@@ -252,9 +252,9 @@ def overlay_instances(img, masks, bboxs, opacity=0.05, score=None, color=None):
     back_mask = Image.fromarray(np.uint8(back_mask), mode='RGBA')
     overlay_img = Image.new("RGB", (img_shape[1], img_shape[0]), color=color)
     img.paste(overlay_img, (0, 0), back_mask)
-    for index, (bbox, sc) in enumerate(zip(bboxs, score)):
+    for arg, bbox, sc in zip(args, bboxs, score):
         im = ImageDraw.Draw(img)
-        im.text((bbox[0] + 3, bbox[3]), f'{index}',
+        im.text((bbox[0] + 3, bbox[3]), f'{arg}',
                 (255, 255, 255), font=font1)
         im.text((bbox[0] + 3, bbox[3] + font_size + 0.5), f'.{int(sc*100)}' if sc < 1 else f'1.00',
                 (255, 255, 255), font=font2)
@@ -267,7 +267,7 @@ def center_coord(box_coord):
     return x_center, y_center
 
 
-def check_overlay(small_box_coord, big_boxs_coord):
+def check_overlay(small_box_coord, big_boxs_coord,):
     for i, big_box_coord in enumerate(big_boxs_coord):
         if IoU(small_box_coord, big_box_coord) > 0.5:
             return True, i
@@ -318,7 +318,7 @@ def read_params(path: str) -> dict:
     return params
 
 
-def write_result(nuclei_boxs, protein_boxs, overlays, save_path):
+def write_result(nuclei_boxs, protein_boxs, overlays, circle_args, ellipse_args, save_path):
     save_file = f'{save_path}/report.txt'
     nb_nuclei = len(nuclei_boxs)
     nb_protein = len(protein_boxs)
@@ -329,9 +329,12 @@ def write_result(nuclei_boxs, protein_boxs, overlays, save_path):
         output_string += f'Nb of nuclei: {nb_nuclei}\n'
         output_string += f'Nb of rad51clumps: {nb_protein}\n'
         output_string += f'Nb of overlaps: {nb_overlay}\n'
-        output_string += f'overlap indices (rad51, nucleus):\n'
+        output_string += f'overlap indices (rad51, nucleus) and number of shape(circle:0, ellipse:1)\n'
         for i in range(nb_overlay):
-            output_string += f'({overlays[i][0]}, {overlays[i][1]})\n'
+            if overlays[i][0] in circle_args:
+                output_string += f'({overlays[i][0]}, {overlays[i][1]}), {0}\n'
+            else:
+                output_string += f'({overlays[i][0]}, {overlays[i][1]}), {1}\n'
         f.write(output_string)
         f.close()
 
@@ -453,11 +456,11 @@ def get_boundary(mask):
 
 
 if __name__ == '__main__':
-    #if len(sys.argv) > 1:
-    #    job_id = sys.argv[1]
-    #else:
-    #    sys.exit(1)
-    job_id = 'mymy'
+    if len(sys.argv) > 1:
+        job_id = sys.argv[1]
+    else:
+        sys.exit(1)
+    #job_id = 'mymy'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -576,6 +579,7 @@ if __name__ == '__main__':
             nuclei_boxs = filtered_boxs.copy()
             img = overlay_instances(
                 img=np.int8(np.sum(images[:-1], axis=0, keepdims=True).reshape(images.shape[1:]) / images.shape[0]),
+                args=np.arange(len(filtered_scores)),
                 masks=filtered_masks, bboxs=filtered_boxs,
                 opacity=0.4, score=filtered_scores, color=(0, 255, 255))
         else:
@@ -591,10 +595,12 @@ if __name__ == '__main__':
 
             img = overlay_instances(
                 img=np.int8(np.max(images, axis=0, keepdims=True).reshape(images.shape[1:])),
+                args=circle_args,
                 masks=circle_masks, bboxs=circle_boxs,
                 opacity=0.4, score=circle_scores, color=(255, 0, 255))
             img = overlay_instances(
                 img=img,
+                args=ellipse_args,
                 masks=ellipse_masks, bboxs=ellipse_boxs,
                 opacity=0.4, score=ellipse_scores, color=(0, 0, 255))
         img.save(f'{save_folder}/{target}.png')
@@ -609,4 +615,4 @@ if __name__ == '__main__':
         if check:
             overlay_indice.append([p_index, nucleus_index])
     overlay_indice = np.array(overlay_indice)  # rad51 , nucleus
-    write_result(nuclei_boxs, protein_boxs, overlay_indice, save_path=save_folder)
+    write_result(nuclei_boxs, protein_boxs, overlay_indice, circle_args, ellipse_args, save_path=save_folder)
