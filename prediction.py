@@ -350,25 +350,29 @@ def score_filter(boxs, cls, masks, scores, threshold=0.9):
     return filtered_boxs, filtered_cls, filtered_masks, filtered_scores
 
 
-def nms(coord_list, scores, threshold=0.2):
+def nms(coord_list, scores, masks, threshold=0.2, sortby='score'):
     coord_list = np.array(coord_list)
     scores = np.array(scores)
-    score_indices = np.argsort(scores)[::-1]
+    masks = np.array(masks)
+    if sortby == 'size':
+        order_indices = np.argsort(np.sum(masks, axis=(1, 2)))[::-1]
+    else:
+        order_indices = np.argsort(scores)[::-1]
     ret_indices = []
     while 1:
-        if len(score_indices) == 1:
-            ret_indices.append(score_indices[0])
+        if len(order_indices) == 1:
+            ret_indices.append(order_indices[0])
             break
-        elif len(score_indices) == 0:
+        elif len(order_indices) == 0:
             break
         else:
-            ret_indices.append(score_indices[0])
+            ret_indices.append(order_indices[0])
             preserv_list = []
-            length = len(score_indices)
+            length = len(order_indices)
             for a in range(1, length):
-                if IoU(coord_list[score_indices[0]], coord_list[score_indices[a]]) < threshold:
-                    preserv_list.append(score_indices[a])
-            score_indices = np.array(preserv_list)
+                if IoU(coord_list[order_indices[0]], coord_list[order_indices[a]]) < threshold:
+                    preserv_list.append(order_indices[a])
+            order_indices = np.array(preserv_list)
     return np.array(ret_indices)
 
 
@@ -470,7 +474,7 @@ if __name__ == '__main__':
 
     eccentricity_threshold = .75
     nuclei_iou_threshold = .2
-    rad51_iou_threshold = .35
+    rad51_iou_threshold = .45
     nuclei_score = params['nuclei_score'] / 100.
     rad51_score = params['rad51_score'] / 100.
     if params['erase'] == 'True':
@@ -536,9 +540,9 @@ if __name__ == '__main__':
             all_cls.extend(cls)
 
         if target=='nuclei':
-            indices = nms(all_boxs, all_scores, nuclei_iou_threshold)
+            indices = nms(all_boxs, all_scores, all_masks, nuclei_iou_threshold, sortby='score')
         else:
-            indices = nms(all_boxs, all_scores, rad51_iou_threshold)
+            indices = nms(all_boxs, all_scores, all_masks, rad51_iou_threshold, sortby='score')
         filtered_boxs = []
         filtered_scores = []
         filtered_masks = []
