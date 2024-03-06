@@ -460,7 +460,7 @@ if __name__ == '__main__':
         job_id = sys.argv[1]
     else:
         sys.exit(1)
-    #job_id = 'mymy'
+    #job_id = 'mytest'
 
     save_folder = f'{SAVE_PATH}/{job_id}'
     data_foler = f'{DATA_PATH}/{job_id}'
@@ -477,7 +477,7 @@ if __name__ == '__main__':
 
     eccentricity_threshold = .75
     nuclei_iou_threshold = .2
-    rad51_iou_threshold = .45
+    rad51_iou_threshold = .35
     nuclei_score = params['nuclei_score'] / 100.
     rad51_score = params['rad51_score'] / 100.
     if params['erase'] == 'True':
